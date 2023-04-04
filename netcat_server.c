@@ -169,6 +169,13 @@ int main(int argc, char *argv[]) {
         // Send the date, time, and socket parameters to the client
         send_time_and_socket_info(clientfd, &clientaddr, clientlen, is_udp);
 
+
+        // Get the client IP address and port
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &clientaddr.sin_addr, client_ip, INET_ADDRSTRLEN);
+        int client_port = ntohs(clientaddr.sin_port);
+        printf("Received connexion from client %s:%d\n", client_ip, client_port);
+
         // Communication loop
         while (1) {
             char buffer[BUFFER_SIZE];
@@ -185,6 +192,8 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
+            
+
             buffer[n] = '\0';
             char *trimmed_buffer = strtok(buffer, "\r\n");
 
@@ -197,6 +206,9 @@ int main(int argc, char *argv[]) {
             } else if (strcmp(trimmed_buffer, "bye") == 0) {
                 break;
             } else {
+                // Print the received message
+                printf("Received message from client %s:%d: %s\n", client_ip, client_port, trimmed_buffer);
+
                 // Send the date and the received message back to the client
                 time_t now = time(NULL);
                 struct tm tm_now = *localtime(&now);
@@ -211,6 +223,10 @@ int main(int argc, char *argv[]) {
                 } else {
                     send(clientfd, response, strlen(response), 0);
                 }
+
+                printf("Sent message to client %s:%d\n", client_ip, client_port);
+                // Print the sent message
+                printf("Sent message to client %s:%d: %s\n", client_ip, client_port, response);
             }
         }
 
