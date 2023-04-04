@@ -8,6 +8,10 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <getopt.h>
+#include <netdb.h>
+
 
 #define DEFAULT_PORT 3300
 #define BUFFER_SIZE 1024
@@ -49,27 +53,78 @@ void send_time_and_socket_info(int sockfd, struct sockaddr_in *clientaddr, sockl
     }
 }
 
+void display_ips() {
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("IPv4 addresses:\n");
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue;
+        family = ifa->ifa_addr->sa_family;
+        if (family == AF_INET) {
+            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+                            host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+            printf("\t%s: %s\n", ifa->ifa_name, host);
+        }
+    }
+
+    printf("IPv6 addresses:\n");
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue;
+        family = ifa->ifa_addr->sa_family;
+        if (family == AF_INET6) {
+            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in6),
+                            host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+            printf("\t%s: %s\n", ifa->ifa_name, host);
+        }
+    }
+
+    freeifaddrs(ifaddr);
+}
+
+
 int main(int argc, char *argv[]) {
     int sockfd;
     bool is_udp = false;
     int port = DEFAULT_PORT;
     struct sockaddr_in serveraddr, clientaddr;
     socklen_t clientlen = sizeof(clientaddr);
+    int c;
 
-    // Parse command-line arguments
-    if (argc > 1) {
-        if (strcmp(argv[1], "-t") == 0) {
-            is_udp = false;
-        } else if (strcmp(argv[1], "-u") == 0) {
-            is_udp = true;
-        } else {
-            print_usage();
-            return 1;
-        }
-        if (argc > 2) {
-            port = atoi(argv[2]);
+
+    while ((c = getopt(argc, argv, "tu:p:")) != -1) {
+        switch (c) {
+            case 't':
+                is_udp = false;
+                break;
+            case 'u':
+                is_udp = true;
+                break;
+            case 'p':
+                port = atoi(optarg);
+                break;
+            default:
+                print_usage();
+                return 1;
         }
     }
+
+    // Affiche les adresses IP
+    display_ips();
 
     // Create the socket
     sockfd = socket(AF_INET, is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
