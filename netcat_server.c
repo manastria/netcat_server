@@ -12,6 +12,9 @@
 #define DEFAULT_PORT 3300
 #define BUFFER_SIZE 1024
 
+/**
+ * Prints the usage instructions for the program.
+ */
 void print_usage() {
     printf("Usage: ./socket_server [-t|-u] [port]\n");
     printf("Options:\n");
@@ -20,6 +23,14 @@ void print_usage() {
     printf("  port  Numéro de port (par défaut: 3300)\n");
 }
 
+/**
+ * Sends the current date and time, as well as the socket parameters, to the client.
+ *
+ * @param sockfd     The socket file descriptor.
+ * @param clientaddr The client address structure.
+ * @param clientlen  The length of the client address structure.
+ * @param is_udp     True if the protocol is UDP, false if it is TCP.
+ */
 void send_time_and_socket_info(int sockfd, struct sockaddr_in *clientaddr, socklen_t clientlen, bool is_udp) {
     char buffer[BUFFER_SIZE];
     time_t now = time(NULL);
@@ -45,6 +56,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serveraddr, clientaddr;
     socklen_t clientlen = sizeof(clientaddr);
 
+    // Parse command-line arguments
     if (argc > 1) {
         if (strcmp(argv[1], "-t") == 0) {
             is_udp = false;
@@ -59,22 +71,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Create the socket
     sockfd = socket(AF_INET, is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
     if (sockfd < 0) {
         perror("Erreur lors de la création du socket");
         return 1;
     }
 
+    // Set up the server address structure
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
     serveraddr.sin_port = htons(port);
 
+    // Bind the socket to the server address
     if (bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
         perror("Erreur lors du bind");
         return 1;
     }
 
+    // Start listening for incoming connections (TCP only)
     if (!is_udp && listen(sockfd, 5) < 0) {
         perror("Erreur lors de l'écoute");
         return 1;
@@ -82,6 +98,7 @@ int main(int argc, char *argv[]) {
 
     printf("Serveur en écoute sur le port %d...\n", port);
 
+    // Main server loop
     while (1) {
         int clientfd;
         if (is_udp) {
@@ -94,12 +111,15 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // Send the date, time, and socket parameters to the client
         send_time_and_socket_info(clientfd, &clientaddr, clientlen, is_udp);
 
+        // Communication loop
         while (1) {
             char buffer[BUFFER_SIZE];
             ssize_t n;
 
+            // Receive a message from the client
             if (is_udp) {
                 n = recvfrom(clientfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
             } else {
@@ -113,6 +133,7 @@ int main(int argc, char *argv[]) {
             buffer[n] = '\0';
             char *trimmed_buffer = strtok(buffer, "\r\n");
 
+            // Handle client commands
             if (strcmp(trimmed_buffer, "quit") == 0 || strcmp(trimmed_buffer, "exit") == 0) {
                 close(clientfd);
                 close(sockfd);
@@ -121,26 +142,30 @@ int main(int argc, char *argv[]) {
             } else if (strcmp(trimmed_buffer, "bye") == 0) {
                 break;
             } else {
+                // Send the date and the received message back to the client
                 time_t now = time(NULL);
                 struct tm tm_now = *localtime(&now);
                 char time_str[64];
                 strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &tm_now);
 
-                snprintf(buffer, sizeof(buffer), "%s | %s\n", time_str, trimmed_buffer);
+                char response[BUFFER_SIZE];
+                snprintf(response, sizeof(response), "%s | %s\n", time_str, trimmed_buffer);
 
                 if (is_udp) {
-                    sendto(clientfd, buffer, strlen(buffer), 0, (struct sockaddr *)&clientaddr, clientlen);
+                    sendto(clientfd, response, strlen(response), 0, (struct sockaddr *)&clientaddr, clientlen);
                 } else {
-                    send(clientfd, buffer, strlen(buffer), 0);
+                    send(clientfd, response, strlen(response), 0);
                 }
             }
         }
 
+        // Close the client socket (TCP only)
         if (!is_udp) {
             close(clientfd);
         }
     }
 
+    // Close the server socket
     close(sockfd);
     return 0;
 }
